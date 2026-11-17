@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProofGuard — a payment-guard agent that proves its decisions</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
+  h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
+  code, pre { background: #f4f4f4; border-radius: 4px; }
+  code { padding: 0 .25em; } pre { padding: .75rem; overflow-x: auto; font-size: .8rem; }
+  label { display: block; margin: .5rem 0 .15rem; font-weight: 600; font-size: .9rem; }
+  input { width: 100%; padding: .45rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: monospace; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+  button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  #out { margin-top: 1rem; }
+  .approve { color: #0a7a2f; font-weight: 700; } .reject { color: #b00020; font-weight: 700; }
+  .muted { color: #555; font-size: .9rem; }
+</style>
+</head>
+<body>
+<h1>ProofGuard</h1>
+<p>A payment-guard agent for the zkVerify Agent Games (Wildcard Track). It screens a proposed
+stablecoin payment against a fixed, published policy — and returns a <strong>Groth16 zero-knowledge
+proof</strong> that its decision follows the policy. A proof for a wrong decision cannot be generated:
+the circuit constrains <code>decision == 1</code> if and only if every check passes.</p>
+
+<h2>Policy (all four must pass to approve)</h2>
+<ol>
+  <li><code>amount &le; maxAmount</code> — otherwise <code>AMOUNT_OVERFLOW</code></li>
+  <li><code>balance &ge; minBalance</code> — otherwise <code>INSUFFICIENT_BALANCE</code></li>
+  <li><code>currentBlock &lt; expiryBlock</code> — otherwise <code>EXPIRED</code></li>
+  <li><code>recipient == expectedRecipient</code> — otherwise <code>RECIPIENT_MISMATCH</code></li>
+</ol>
+<p class="muted">The proof is bound to one <code>taskId</code> (sha256, first 31 bytes, public signal 10).
+The agent never signs or sends a transaction and holds no keys. It only judges.</p>
+
+<h2>Try it</h2>
+<form id="f">
+  <div class="row">
+    <div><label>taskId</label><input name="taskId" value="demo-001"></div>
+    <div><label>token</label><input name="token" value="USDC"></div>
+    <div><label>amount</label><input name="amount" value="500"></div>
+    <div><label>maxAmount</label><input name="maxAmount" value="1000"></div>
+    <div><label>balance</label><input name="balance" value="1500"></div>
+    <div><label>minBalance</label><input name="minBalance" value="1000"></div>
+    <div><label>currentBlock</label><input name="currentBlock" value="100"></div>
+    <div><label>expiryBlock</label><input name="expiryBlock" value="200"></div>
+    <div><label>recipient</label><input name="recipient" value="0x1111111111111111111111111111111111111111"></div>
+    <div><label>expectedRecipient</label><input name="expectedRecipient" value="0x1111111111111111111111111111111111111111"></div>
+  </div>
+  <button type="submit">Ask the guard</button>
+  <button type="button" id="bad">Try a bad one (amount 1500)</button>
+</form>
+<div id="out"></div>
+
+<h2>Verify a receipt yourself</h2>
+<p>Every response includes the proof, the 10 public signals, and the verification key.
+Save them as <code>proof.json</code>, <code>public.json</code>, <code>verification_key.json</code> and run:</p>
+<pre>snarkjs groth16 verify verification_key.json public.json proof.json</pre>
+<p>Or paste a response below and verify it here (calls <code>POST /api/verify</code>):</p>
+<textarea id="receipt" rows="4" style="width:100%;font-family:monospace" placeholder='{"proof": {...}, "publicSignals": [...]}'></textarea>
+<button id="verifyBtn" type="button">Verify receipt</button>
+<div id="verifyOut"></div>
+
+<h2>API</h2>
+<pre>POST /api/guard   {"taskId","token","amount","maxAmount","balance","minBalance","currentBlock","expiryBlock","recipient","expectedRecipient"}
+POST /api/verify  {"proof": {"pi_a","pi_b","pi_c"}, "publicSignals": ["10 strings"]}
+GET  /api/health</pre>
+<p class="muted">Circuit: <code>payment_guard.circom</code> (Groth16, BN254, 213 constraints, 10 public inputs).
+Source: see the repo README. Built for zkVerify Agent Games, Season 01, Wildcard Track.</p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let last = null;
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {};
+  for (const el of e.target.elements) if (el.name) body[el.name] = el.value;
+  await ask(body);
+});
+$('bad').addEventListener('click', async () => {
+  const body = {};
+  for (const el of $('f').elements) if (el.name) body[el.name] = el.value;
+  body.amount = '1500'; body.taskId = 'demo-bad-001';
+  await ask(body);
+});
+async function ask(body) {
+  $('out').innerHTML = '<p>Asking the guard…</p>';
+  const r = await fetch('/api/guard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  last = j;
+  if (!r.ok) { $('out').innerHTML = '<p class="reject">Error: ' + (j.error || r.status) + '</p>'; return; }
+  const cls = j.decision === 'APPROVE' ? 'approve' : 'reject';
+  $('out').innerHTML = '<p>Decision: <span class="' + cls + '">' + j.decision + '</span>'
+    + ' &nbsp; reasons: <code>' + (j.reasonCodes.join(', ') || 'none') + '</code>'
+    + ' &nbsp; proved in ' + j.proveMs + 'ms</p><pre>' + JSON.stringify(j, null, 2) + '</pre>';
+  $('receipt').value = JSON.stringify({ proof: { pi_a: j.proof.pi_a, pi_b: j.proof.pi_b, pi_c: j.proof.pi_c }, publicSignals: j.publicSignals });
+}
+$('verifyBtn').addEventListener('click', async () => {
+  let body;
+  try { body = JSON.parse($('receipt').value); } catch (e) { $('verifyOut').innerHTML = '<p class="reject">Not valid JSON.</p>'; return; }
+  const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  $('verifyOut').innerHTML = j.valid
+    ? '<p class="approve">Receipt VALID — the proof verifies against the published verification key.</p>'
+    : '<p class="reject">Receipt INVALID' + (j.error ? ': ' + j.error : '') + '</p>';
+});
+</script>
+</body>
+</html>

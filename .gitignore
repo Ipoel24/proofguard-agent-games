@@ -1,0 +1,11 @@
+node_modules/
+.vercel/
+*.log
+.DS_Store
+pot12_*.ptau
+payment_guard_0000.zkey
+# Binary circuit artifacts are stored as base64 (.b64) — the .b64 is the
+# committed form, the binary is derived (see scripts/decode-artifacts.js).
+*.zkey
+*.wasm
+*.r1cs
