@@ -1,7 +1,7 @@
 # ProofGuard — a payment-guard agent that proves its decisions
 
 **zkVerify Agent Games, Season 01 — Wildcard Track.**
-Live demo: *(endpoint URL goes here after Vercel deploy — see DEPLOY.md)*
+Live demo: https://proofguard.vercel.app
 
 ## The problem
 
