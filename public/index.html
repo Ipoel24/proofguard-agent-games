@@ -5,107 +5,327 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ProofGuard — a payment-guard agent that proves its decisions</title>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
-  h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
-  code, pre { background: #f4f4f4; border-radius: 4px; }
-  code { padding: 0 .25em; } pre { padding: .75rem; overflow-x: auto; font-size: .8rem; }
-  label { display: block; margin: .5rem 0 .15rem; font-weight: 600; font-size: .9rem; }
-  input { width: 100%; padding: .45rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: monospace; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
-  button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
-  #out { margin-top: 1rem; }
-  .approve { color: #0a7a2f; font-weight: 700; } .reject { color: #b00020; font-weight: 700; }
-  .muted { color: #555; font-size: .9rem; }
+  :root {
+    --paper: #fafaf7;
+    --ink: #1a1d21;
+    --ink-soft: #4a4f55;
+    --hairline: #e2e0da;
+    --card: #ffffff;
+    --approve: #0b7a4b;
+    --approve-bg: #e7f4ec;
+    --reject: #b3261e;
+    --reject-bg: #fdecea;
+    --accent: #1d4ed8;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55; font-size: 16px;
+  }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: .88em; background: #f0eee9; padding: .1em .35em; border-radius: 4px; }
+  pre {
+    font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+    background: #14161a; color: #e8e6e1; padding: 1rem 1.1rem; border-radius: 10px;
+    overflow-x: auto; margin: .75rem 0;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+
+  /* top bar */
+  .topbar {
+    border-bottom: 1px solid var(--hairline); background: var(--card);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar-inner {
+    max-width: 920px; margin: 0 auto; padding: .7rem 1.25rem;
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  }
+  .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: -.01em; text-decoration: none; color: var(--ink); }
+  .brand .mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.7rem; height: 1.7rem; margin-right: .45rem; border-radius: 6px;
+    background: var(--ink); color: var(--paper); font-size: .95rem; vertical-align: -.35rem;
+  }
+  .track {
+    margin-left: auto; font-size: .8rem; color: var(--ink-soft);
+    border: 1px solid var(--hairline); border-radius: 999px; padding: .25rem .7rem;
+    background: var(--paper); white-space: nowrap;
+  }
+  .track a { color: var(--ink-soft); text-decoration: none; }
+  .track a:hover { color: var(--ink); text-decoration: underline; }
+
+  main { max-width: 920px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+
+  /* hero */
+  .hero { padding: 3rem 0 1.5rem; max-width: 720px; }
+  .hero h1 {
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: clamp(2.1rem, 5.4vw, 3.1rem); line-height: 1.08; letter-spacing: -.015em;
+    margin: 0 0 1rem; font-weight: 700;
+  }
+  .hero p.lede { font-size: 1.12rem; color: var(--ink-soft); margin: 0 0 1.25rem; max-width: 640px; }
+  .hero p.lede strong { color: var(--ink); }
+  .facts { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+  .facts li {
+    font-family: var(--mono); font-size: .8rem; color: var(--ink-soft);
+    border: 1px solid var(--hairline); background: var(--card);
+    border-radius: 999px; padding: .3rem .75rem;
+  }
+  .facts li b { color: var(--ink); font-weight: 700; }
+
+  section { margin-top: 2.75rem; }
+  section > h2 {
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 1.55rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.01em;
+  }
+  section > .sub { color: var(--ink-soft); margin: 0 0 1.25rem; max-width: 640px; }
+
+  /* policy grid */
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+  .check {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: 12px;
+    padding: 1rem 1.1rem .9rem;
+  }
+  .check .rule { font-family: var(--mono); font-size: .92rem; font-weight: 700; }
+  .check .fail { margin: .45rem 0 0; font-size: .9rem; color: var(--ink-soft); }
+  .check .fail code { color: var(--reject); background: var(--reject-bg); }
+  .note { margin-top: 1rem; color: var(--ink-soft); font-size: .95rem; max-width: 640px; }
+
+  /* demo panel */
+  .panel {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: 14px;
+    padding: 1.25rem 1.25rem 1.4rem;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem 1rem; }
+  .field label { display: block; font-size: .82rem; font-weight: 650; margin-bottom: .3rem; color: var(--ink-soft); }
+  .field input {
+    width: 100%; padding: .6rem .7rem; font-family: var(--mono); font-size: .92rem;
+    border: 1px solid #cfccc4; border-radius: 8px; background: var(--paper); color: var(--ink);
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); background: #fff; }
+  .actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.1rem; }
+  button {
+    font: inherit; font-weight: 650; cursor: pointer; border-radius: 8px;
+    padding: .65rem 1.25rem; border: 1px solid var(--ink); background: var(--ink); color: #fff;
+  }
+  button:hover { background: #000; }
+  button.secondary { background: transparent; color: var(--ink); border-color: #cfccc4; }
+  button.secondary:hover { border-color: var(--ink); background: #fff; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .55; cursor: wait; }
+
+  /* verdict stamp */
+  #out { margin-top: 1.25rem; }
+  #out:empty { display: none; }
+  .verdict { display: flex; flex-direction: column; gap: .9rem; }
+  .stamp {
+    align-self: flex-start; font-weight: 800; letter-spacing: .06em;
+    font-size: 1.5rem; padding: .35rem .9rem; border-radius: 8px;
+    border: 3px solid currentColor; transform: rotate(-2deg);
+  }
+  .stamp.approve { color: var(--approve); background: var(--approve-bg); }
+  .stamp.reject { color: var(--reject); background: var(--reject-bg); }
+  .meta { font-size: .92rem; color: var(--ink-soft); }
+  .meta code { color: var(--ink); }
+  .verdict details { border-top: 1px solid var(--hairline); padding-top: .75rem; }
+  .verdict summary { cursor: pointer; font-weight: 650; font-size: .92rem; }
+  .verdict summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .err { color: var(--reject); font-weight: 650; }
+
+  /* verify */
+  textarea {
+    width: 100%; min-height: 96px; padding: .7rem; font-family: var(--mono); font-size: .85rem;
+    border: 1px solid #cfccc4; border-radius: 8px; background: var(--paper); color: var(--ink); resize: vertical;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); background: #fff; }
+  #verifyOut { margin-top: .9rem; }
+  #verifyOut:empty { display: none; }
+  .valid { color: var(--approve); font-weight: 700; }
+  .invalid { color: var(--reject); font-weight: 700; }
+
+  footer {
+    margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--hairline);
+    color: var(--ink-soft); font-size: .9rem; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-between;
+  }
+  footer a { color: var(--ink-soft); }
+
+  @media (max-width: 640px) {
+    .checks, .grid { grid-template-columns: 1fr; }
+    .hero { padding-top: 2.25rem; }
+    .track { margin-left: 0; }
+    .stamp { font-size: 1.25rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stamp { transform: none; }
+  }
 </style>
 </head>
 <body>
-<h1>ProofGuard</h1>
-<p>A payment-guard agent for the zkVerify Agent Games (Wildcard Track). It screens a proposed
-stablecoin payment against a fixed, published policy — and returns a <strong>Groth16 zero-knowledge
-proof</strong> that its decision follows the policy. A proof for a wrong decision cannot be generated:
-the circuit constrains <code>decision == 1</code> if and only if every check passes.</p>
-
-<h2>Policy (all four must pass to approve)</h2>
-<ol>
-  <li><code>amount &le; maxAmount</code> — otherwise <code>AMOUNT_OVERFLOW</code></li>
-  <li><code>balance &ge; minBalance</code> — otherwise <code>INSUFFICIENT_BALANCE</code></li>
-  <li><code>currentBlock &lt; expiryBlock</code> — otherwise <code>EXPIRED</code></li>
-  <li><code>recipient == expectedRecipient</code> — otherwise <code>RECIPIENT_MISMATCH</code></li>
-</ol>
-<p class="muted">The proof is bound to one <code>taskId</code> (sha256, first 31 bytes, public signal 10).
-The agent never signs or sends a transaction and holds no keys. It only judges.</p>
-
-<h2>Try it</h2>
-<form id="f">
-  <div class="row">
-    <div><label>taskId</label><input name="taskId" value="demo-001"></div>
-    <div><label>token</label><input name="token" value="USDC"></div>
-    <div><label>amount</label><input name="amount" value="500"></div>
-    <div><label>maxAmount</label><input name="maxAmount" value="1000"></div>
-    <div><label>balance</label><input name="balance" value="1500"></div>
-    <div><label>minBalance</label><input name="minBalance" value="1000"></div>
-    <div><label>currentBlock</label><input name="currentBlock" value="100"></div>
-    <div><label>expiryBlock</label><input name="expiryBlock" value="200"></div>
-    <div><label>recipient</label><input name="recipient" value="0x1111111111111111111111111111111111111111"></div>
-    <div><label>expectedRecipient</label><input name="expectedRecipient" value="0x1111111111111111111111111111111111111111"></div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="mark">&#10003;</span>ProofGuard</a>
+    <span class="track">zkVerify Agent Games &middot; Wildcard Track &middot; <a href="https://github.com/Ipoel24/proofguard-agent-games">GitHub</a></span>
   </div>
-  <button type="submit">Ask the guard</button>
-  <button type="button" id="bad">Try a bad one (amount 1500)</button>
-</form>
-<div id="out"></div>
+</header>
 
-<h2>Verify a receipt yourself</h2>
-<p>Every response includes the proof, the 10 public signals, and the verification key.
-Save them as <code>proof.json</code>, <code>public.json</code>, <code>verification_key.json</code> and run:</p>
-<pre>snarkjs groth16 verify verification_key.json public.json proof.json</pre>
-<p>Or paste a response below and verify it here (calls <code>POST /api/verify</code>):</p>
-<textarea id="receipt" rows="4" style="width:100%;font-family:monospace" placeholder='{"proof": {...}, "publicSignals": [...]}'></textarea>
-<button id="verifyBtn" type="button">Verify receipt</button>
-<div id="verifyOut"></div>
+<main>
+  <div class="hero">
+    <h1>Every approval comes with a proof.</h1>
+    <p class="lede">ProofGuard is a payment-guard agent. It screens a proposed stablecoin payment
+    against a fixed, published policy &mdash; and returns a <strong>Groth16 zero-knowledge proof</strong>
+    that its decision follows the policy. A report is a claim. A proof is a receipt:
+    anyone can re-verify it offline, without trusting the agent&rsquo;s word.</p>
+    <ul class="facts">
+      <li>Groth16 &middot; <b>BN254</b></li>
+      <li><b>1,179</b> constraints</li>
+      <li><b>10</b> public inputs</li>
+      <li>proved in <b>~1s</b></li>
+      <li>never signs &middot; holds <b>no keys</b></li>
+    </ul>
+  </div>
 
-<h2>API</h2>
-<pre>POST /api/guard   {"taskId","token","amount","maxAmount","balance","minBalance","currentBlock","expiryBlock","recipient","expectedRecipient"}
+  <section aria-labelledby="policy-h">
+    <h2 id="policy-h">The policy</h2>
+    <p class="sub">All four checks must pass to approve. The circuit enforces exactly these rules,
+    so a proof for a wrong decision cannot be generated.</p>
+    <div class="checks">
+      <div class="check">
+        <div class="rule">amount &le; maxAmount</div>
+        <p class="fail">Otherwise <code>AMOUNT_OVERFLOW</code></p>
+      </div>
+      <div class="check">
+        <div class="rule">balance &ge; minBalance</div>
+        <p class="fail">Otherwise <code>INSUFFICIENT_BALANCE</code></p>
+      </div>
+      <div class="check">
+        <div class="rule">currentBlock &lt; expiryBlock</div>
+        <p class="fail">Otherwise <code>EXPIRED</code></p>
+      </div>
+      <div class="check">
+        <div class="rule">recipient == expectedRecipient</div>
+        <p class="fail">Otherwise <code>RECIPIENT_MISMATCH</code></p>
+      </div>
+    </div>
+    <p class="note">The proof is bound to one <code>taskId</code> (sha256, first 31 bytes, public signal 10).
+    The agent never signs or sends a transaction and holds no keys. It only judges.</p>
+  </section>
+
+  <section aria-labelledby="try-h">
+    <h2 id="try-h">Try it live</h2>
+    <p class="sub">Ask the guard about a payment. It judges the request and returns the decision
+    with a real proof &mdash; generated on this server, right now.</p>
+    <div class="panel">
+      <form id="f">
+        <div class="grid">
+          <div class="field"><label for="in-taskId">taskId</label><input id="in-taskId" name="taskId" value="demo-001"></div>
+          <div class="field"><label for="in-token">token</label><input id="in-token" name="token" value="USDC"></div>
+          <div class="field"><label for="in-amount">amount</label><input id="in-amount" name="amount" value="500" inputmode="numeric"></div>
+          <div class="field"><label for="in-maxAmount">maxAmount</label><input id="in-maxAmount" name="maxAmount" value="1000" inputmode="numeric"></div>
+          <div class="field"><label for="in-balance">balance</label><input id="in-balance" name="balance" value="1500" inputmode="numeric"></div>
+          <div class="field"><label for="in-minBalance">minBalance</label><input id="in-minBalance" name="minBalance" value="1000" inputmode="numeric"></div>
+          <div class="field"><label for="in-currentBlock">currentBlock</label><input id="in-currentBlock" name="currentBlock" value="100" inputmode="numeric"></div>
+          <div class="field"><label for="in-expiryBlock">expiryBlock</label><input id="in-expiryBlock" name="expiryBlock" value="200" inputmode="numeric"></div>
+          <div class="field"><label for="in-recipient">recipient</label><input id="in-recipient" name="recipient" value="0x1111111111111111111111111111111111111111"></div>
+          <div class="field"><label for="in-expectedRecipient">expectedRecipient</label><input id="in-expectedRecipient" name="expectedRecipient" value="0x1111111111111111111111111111111111111111"></div>
+        </div>
+        <div class="actions">
+          <button type="submit" id="askBtn">Ask the guard</button>
+          <button type="button" class="secondary" id="bad">Try a bad one (amount 1500)</button>
+        </div>
+      </form>
+      <div id="out" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="verify-h">
+    <h2 id="verify-h">Verify a receipt yourself</h2>
+    <p class="sub">Every response includes the proof, the 10 public signals, and the verification key.
+    Save them as <code>proof.json</code>, <code>public.json</code> and <code>verification_key.json</code>, then run:</p>
+    <pre>snarkjs groth16 verify verification_key.json public.json proof.json</pre>
+    <p class="sub">Or paste a response below and verify it here (calls <code>POST /api/verify</code>):</p>
+    <textarea id="receipt" rows="4" placeholder='{"proof": {...}, "publicSignals": [...]}'></textarea>
+    <div class="actions"><button id="verifyBtn" type="button">Verify receipt</button></div>
+    <div id="verifyOut" aria-live="polite"></div>
+  </section>
+
+  <section aria-labelledby="api-h">
+    <h2 id="api-h">API</h2>
+    <pre>POST /api/guard   {"taskId","token","amount","maxAmount","balance","minBalance","currentBlock","expiryBlock","recipient","expectedRecipient"}
 POST /api/verify  {"proof": {"pi_a","pi_b","pi_c"}, "publicSignals": ["10 strings"]}
 GET  /api/health</pre>
-<p class="muted">Circuit: <code>payment_guard.circom</code> (Groth16, BN254, 1,179 constraints, 10 public inputs).
-Source: see the repo README. Built for zkVerify Agent Games, Season 01, Wildcard Track.</p>
+  </section>
+
+  <footer>
+    <span>Circuit: <code>payment_guard.circom</code> (Groth16, BN254, 1,179 constraints, 10 public inputs).</span>
+    <span>Built for zkVerify Agent Games, Season 01, Wildcard Track. <a href="https://github.com/Ipoel24/proofguard-agent-games">Source on GitHub</a></span>
+  </footer>
+</main>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let last = null;
+
+function formBody(form) {
+  const body = {};
+  for (const el of form.elements) if (el.name) body[el.name] = el.value;
+  return body;
+}
+
 $('f').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const body = {};
-  for (const el of e.target.elements) if (el.name) body[el.name] = el.value;
-  await ask(body);
+  await ask(formBody(e.target));
 });
 $('bad').addEventListener('click', async () => {
-  const body = {};
-  for (const el of $('f').elements) if (el.name) body[el.name] = el.value;
+  const body = formBody($('f'));
   body.amount = '1500'; body.taskId = 'demo-bad-001';
   await ask(body);
 });
+
 async function ask(body) {
-  $('out').innerHTML = '<p>Asking the guard…</p>';
-  const r = await fetch('/api/guard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const j = await r.json();
-  last = j;
-  if (!r.ok) { $('out').innerHTML = '<p class="reject">Error: ' + (j.error || r.status) + '</p>'; return; }
-  const cls = j.decision === 'APPROVE' ? 'approve' : 'reject';
-  $('out').innerHTML = '<p>Decision: <span class="' + cls + '">' + j.decision + '</span>'
-    + ' &nbsp; reasons: <code>' + (j.reasonCodes.join(', ') || 'none') + '</code>'
-    + ' &nbsp; proved in ' + j.proveMs + 'ms</p><pre>' + JSON.stringify(j, null, 2) + '</pre>';
-  $('receipt').value = JSON.stringify({ proof: { pi_a: j.proof.pi_a, pi_b: j.proof.pi_b, pi_c: j.proof.pi_c }, publicSignals: j.publicSignals });
+  const btn = $('askBtn');
+  btn.disabled = true;
+  $('out').innerHTML = '<p class="meta">Asking the guard&hellip;</p>';
+  try {
+    const r = await fetch('/api/guard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    last = j;
+    if (!r.ok) { $('out').innerHTML = '<p class="err">Error: ' + escapeHtml(j.error || r.status) + '</p>'; return; }
+    const ok = j.decision === 'APPROVE';
+    const reasons = (j.reasonCodes && j.reasonCodes.length) ? j.reasonCodes.join(', ') : 'none';
+    $('out').innerHTML =
+      '<div class="verdict">'
+      + '<span class="stamp ' + (ok ? 'approve' : 'reject') + '">' + j.decision + '</span>'
+      + '<p class="meta">Reasons: <code>' + escapeHtml(reasons) + '</code> &nbsp;&middot;&nbsp; proved in <b>' + j.proveMs + ' ms</b> &nbsp;&middot;&nbsp; task <code>' + escapeHtml(j.taskId) + '</code></p>'
+      + '<details><summary>See the full receipt (proof + public signals)</summary><pre>' + escapeHtml(JSON.stringify(j, null, 2)) + '</pre></details>'
+      + '</div>';
+    $('receipt').value = JSON.stringify({ proof: { pi_a: j.proof.pi_a, pi_b: j.proof.pi_b, pi_c: j.proof.pi_c }, publicSignals: j.publicSignals });
+  } catch (e) {
+    $('out').innerHTML = '<p class="err">Request failed: ' + escapeHtml(e.message) + '</p>';
+  } finally {
+    btn.disabled = false;
+  }
 }
+
 $('verifyBtn').addEventListener('click', async () => {
   let body;
-  try { body = JSON.parse($('receipt').value); } catch (e) { $('verifyOut').innerHTML = '<p class="reject">Not valid JSON.</p>'; return; }
-  const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const j = await r.json();
-  $('verifyOut').innerHTML = j.valid
-    ? '<p class="approve">Receipt VALID — the proof verifies against the published verification key.</p>'
-    : '<p class="reject">Receipt INVALID' + (j.error ? ': ' + j.error : '') + '</p>';
+  try { body = JSON.parse($('receipt').value); } catch (e) { $('verifyOut').innerHTML = '<p class="invalid">Not valid JSON.</p>'; return; }
+  $('verifyOut').innerHTML = '<p class="meta">Verifying&hellip;</p>';
+  try {
+    const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    $('verifyOut').innerHTML = j.valid
+      ? '<p class="valid">Receipt VALID &mdash; the proof verifies against the published verification key.</p>'
+      : '<p class="invalid">Receipt INVALID' + (j.error ? ': ' + escapeHtml(j.error) : '') + '</p>';
+  } catch (e) {
+    $('verifyOut').innerHTML = '<p class="invalid">Request failed: ' + escapeHtml(e.message) + '</p>';
+  }
 });
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 </script>
 </body>
 </html>
